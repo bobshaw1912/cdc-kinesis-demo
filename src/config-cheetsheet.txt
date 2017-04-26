@@ -1,0 +1,28 @@
+## this is a high level configuration flow and commands you need to use in order to complete this architecture.
+
+1. Spin off an RDS (single AZ is good enough) from AWS Console.
+
+2. Set the binlog_format as 'ROW' in RDS Parameter Group - note you need to create a new parameter group and applies to the RDS you just created. 
+
+3. Run below procedure after you connect to RDS MySQL with any SQL client you like. It will change the binlog duration to 24 hours. 
+
+call mysql.rds_set_configuration('binlog retention hours', 24)
+
+4. Create a kinsis stream with one shard as below AWS CLI command or from AWS Console. 
+
+aws kinesis create-stream –stream-name mysql-binlog –shard-count 1
+
+5. Run below docker command on any EC2 with Docker daemon installed. You need to change the database link, credential and kinesis accordingly.
+
+docker run -it --rm --name maxwell-kinesis  -v `cd && pwd`/.aws:/root/.aws saidimu/maxwell  sh -c 'cp /app/kinesis-producer-library.properties.example /app/kinesis-producer-library.properties && echo "Region=AWS-Region-ID" >> /app/kinesis-producer-library.properties && /app/bin/maxwell --user=DB_USERNAME --password=DB_PASSWORD --host=MYSQL_RDS_URI --producer=kinesis --kinesis_stream=KINESIS_NAME ' 
+
+6. Create a lambda function and then update the trigger as the kinesis stream you created.  You can specify the batch size as 1 if you like to handle every single record from kinesis stream immediately. The source code is written in Python 2.7. Please specify the corrresponding runtime when you configure AWS lambda function. 
+
+7. You then need to create a Kinesis firehose delivery stream by coping the data (written by Lambda function) onto S3/Redshift. Please specify the additional Copy Option for Redshift as - 
+
+DELIMETER as ','
+
+8. We use MySQL demo database employees for demo. Please see the details here. 
+https://dev.mysql.com/doc/employee/en/
+
+9. Please create another staging table with same schema like emplopyee tables. The table name needs to be specified as same as step 7 in Kinesis Firehose.
